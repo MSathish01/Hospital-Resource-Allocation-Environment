@@ -1,27 +1,24 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+import random
 
 app = FastAPI()
 
 # -------------------------------
-# Dummy Environment State
+# GLOBAL STATE
 # -------------------------------
-state_data = {
-    "beds": 10,
-    "patients": 5,
-    "step": 0
-}
+state_data = {}
 
 # -------------------------------
-# Home Route
+# HOME
 # -------------------------------
 @app.get("/")
 def home():
     return {"message": "Hospital Environment Running"}
 
 # -------------------------------
-# Web UI (IMPORTANT for HF)
+# WEB UI (HF Spaces REQUIRED)
 # -------------------------------
 @app.get("/web", response_class=HTMLResponse)
 def web_ui():
@@ -30,7 +27,7 @@ def web_ui():
         <head><title>Hospital Env</title></head>
         <body>
             <h1>🏥 Hospital Resource Allocation</h1>
-            <p>✅ App is working!</p>
+            <p>🎯 Allocate beds efficiently to treat patients</p>
             <ul>
                 <li><a href="/docs">API Docs</a></li>
                 <li><a href="/health">Health Check</a></li>
@@ -40,58 +37,108 @@ def web_ui():
     """
 
 # -------------------------------
-# Health Check
+# HEALTH
 # -------------------------------
 @app.get("/health")
 def health():
     return {"status": "healthy"}
 
 # -------------------------------
-# Reset Environment
+# RESET
 # -------------------------------
 @app.post("/reset")
 def reset():
     global state_data
+
+    difficulty = random.choice(["easy", "medium", "hard"])
+
+    if difficulty == "easy":
+        beds = 10
+        patients = 5
+    elif difficulty == "medium":
+        beds = 8
+        patients = 8
+    else:
+        beds = 5
+        patients = 10
+
     state_data = {
-        "beds": 10,
-        "patients": 5,
-        "step": 0
+        "beds": beds,
+        "patients": patients,
+        "step": 0,
+        "difficulty": difficulty
     }
+
     return {
         "observation": state_data,
-        "reward": 0,
-        "done": False
+        "reward": 0.0,
+        "score": 0.0,
+        "done": False,
+        "task": difficulty
     }
 
 # -------------------------------
-# Action Model
+# ACTION MODEL
 # -------------------------------
 class Action(BaseModel):
     allocate: int
 
 # -------------------------------
-# Step Function
+# STEP
 # -------------------------------
 @app.post("/step")
 def step(action: Action):
     global state_data
 
+    allocate = action.allocate
+    beds = state_data["beds"]
+    patients = state_data["patients"]
+
+    # Prevent invalid allocation
+    allocate = max(0, min(allocate, beds))
+
     state_data["step"] += 1
-    state_data["beds"] -= action.allocate
-    state_data["patients"] -= action.allocate
+    state_data["beds"] -= allocate
+    state_data["patients"] -= allocate
 
-    reward = action.allocate
+    # -------------------------------
+    # REWARD LOGIC
+    # -------------------------------
+    if allocate == 0:
+        reward = -0.5
+    elif allocate > patients:
+        reward = -1.0
+    else:
+        reward = allocate * 1.0
 
-    done = state_data["step"] >= 5
+    # Bonus if completed
+    if state_data["patients"] <= 0:
+        reward += 5.0
+
+    # -------------------------------
+    # GRADER (0 → 1 score)
+    # -------------------------------
+    max_reward = 10.0
+    score = max(0.0, min(1.0, reward / max_reward))
+
+    # -------------------------------
+    # DONE
+    # -------------------------------
+    done = (
+        state_data["step"] >= 5
+        or state_data["patients"] <= 0
+        or state_data["beds"] <= 0
+    )
 
     return {
         "observation": state_data,
         "reward": reward,
+        "score": score,
         "done": done
     }
 
 # -------------------------------
-# Get State
+# STATE
 # -------------------------------
 @app.get("/state")
 def state():

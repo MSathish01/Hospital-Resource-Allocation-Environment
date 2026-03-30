@@ -1,20 +1,39 @@
 import requests
 
-BASE_URL = "http://localhost:7860"
+BASE_URL = "https://msathish-hospital-env.hf.space"
 
-# reset
-res = requests.post(f"{BASE_URL}/reset").json()
-print("Reset:", res)
+# -------------------------------
+# RESET ENVIRONMENT
+# -------------------------------
+response = requests.post(f"{BASE_URL}/reset")
+data = response.json()
+
+print("🔄 RESET ENVIRONMENT")
+print("Initial State:", data)
 
 done = False
-total_reward = 0
+step_count = 0
 
+# -------------------------------
+# SIMPLE AGENT LOOP
+# -------------------------------
 while not done:
-    action = {"patient_id": 0}
-    res = requests.post(f"{BASE_URL}/step", json=action).json()
-    
-    total_reward += res["reward"]
-    done = res["done"]
-    print(f"Step - Reward: {res['reward']}, Done: {done}")
+    step_count += 1
 
-print("Final Score:", total_reward)
+    # Simple strategy
+    action = {
+        "allocate": 2
+    }
+
+    response = requests.post(f"{BASE_URL}/step", json=action)
+    data = response.json()
+
+    print(f"\n➡ Step {step_count}")
+    print("Observation:", data["observation"])
+    print("Reward:", data["reward"])
+    print("Score:", data.get("score", "N/A"))  # Important
+    print("Done:", data["done"])
+
+    done = data["done"]
+
+print("\n🏁 EPISODE FINISHED")
