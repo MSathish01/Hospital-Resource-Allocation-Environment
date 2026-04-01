@@ -5,10 +5,14 @@ import random
 
 app = FastAPI()
 
-
+# -------------------------------
+# GLOBAL STATE
+# -------------------------------
 state_data = {}
 
-
+# -------------------------------
+# RESET
+# -------------------------------
 @app.post("/reset")
 def reset():
     global state_data
@@ -25,7 +29,6 @@ def reset():
         beds = 5
         num_patients = 10
 
-    # Create patients with severity
     patients = []
     for i in range(num_patients):
         severity = random.choice(["low", "medium", "high"])
@@ -62,6 +65,9 @@ class Action(BaseModel):
 def step(action: Action):
     global state_data
 
+    if not state_data:
+        return {"error": "Call /reset first"}
+
     beds = state_data["beds"]
     patients = state_data["patients"]
 
@@ -71,9 +77,7 @@ def step(action: Action):
 
     reward = 0
 
-    # -------------------------------
-    # REWARD BASED ON SEVERITY
-    # -------------------------------
+    # Reward based on severity
     for p in treated:
         if p["severity"] == "high":
             reward += 3
@@ -82,48 +86,35 @@ def step(action: Action):
         else:
             reward += 1
 
-    # -------------------------------
-    # PENALTIES
-    # -------------------------------
+    # Penalties
     unused_beds = beds - allocate
     reward -= unused_beds * 0.5
-
     reward -= len(remaining) * 1.5
 
-    # -------------------------------
-    # TIME PRESSURE
-    # -------------------------------
+    # Time pressure
     state_data["time"] -= 1
     if state_data["time"] <= 0:
         reward -= 5
 
-    # -------------------------------
-    # UPDATE STATE
-    # -------------------------------
+    # Update state
     state_data["beds"] -= allocate
     state_data["patients"] = remaining
     state_data["step"] += 1
 
-    # Dynamic new patients
-    new_patients = random.randint(0, 2)
-    for _ in range(new_patients):
+    # Dynamic patients
+    for _ in range(random.randint(0, 2)):
         state_data["patients"].append({
             "id": random.randint(100, 999),
             "severity": random.choice(["low", "medium", "high"])
         })
 
-    # -------------------------------
-    # DONE CONDITION
-    # -------------------------------
     done = (
         state_data["step"] >= 5
         or len(state_data["patients"]) == 0
         or state_data["beds"] <= 0
     )
 
-    # -------------------------------
-    # GRADER (0 → 1 score)
-    # -------------------------------
+    # Normalized score
     score = max(0.0, min(1.0, reward / 20.0))
 
     return {
@@ -152,7 +143,7 @@ def health():
 # -------------------------------
 @app.get("/")
 def home():
-    return {"message": "Hospital Environment Running"}
+    return {"message": "MedAlloc-RL Running"}
 
 # -------------------------------
 # WEB UI
@@ -161,12 +152,12 @@ def home():
 def web_ui():
     return """
     <html>
-        <head><title>Hospital Env</title></head>
+        <head><title>MedAlloc-RL</title></head>
         <body>
-            <h1>🏥 Hospital Resource Allocation </h1>
-            <p>🚑 Patients have priority levels</p>
+            <h1>🏥 MedAlloc-RL</h1>
+            <p>🚑 Priority-based patients</p>
             <p>⏱ Time pressure + dynamic arrivals</p>
-            <p>📊 Reward based on efficiency</p>
+            <p>📊 Reward shaping + grading</p>
             <ul>
                 <li><a href="/docs">API Docs</a></li>
                 <li><a href="/health">Health</a></li>
@@ -174,3 +165,16 @@ def web_ui():
         </body>
     </html>
     """
+
+# -------------------------------
+# MAIN FUNCTION (REQUIRED)
+# -------------------------------
+def main():
+    import uvicorn
+    uvicorn.run("server.app:app", host="0.0.0.0", port=7860)
+
+# -------------------------------
+# ENTRY POINT
+# -------------------------------
+if __name__ == "__main__":
+    main()

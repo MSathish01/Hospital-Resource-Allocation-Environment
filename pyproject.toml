@@ -1,17 +1,12 @@
 [project]
-name = "hospital-env"
+name = "medalloc-rl"
 version = "0.1.0"
-description = "Hospital Resource Allocation Environment"
-authors = [
-    { name = "Sathish" }
-]
 dependencies = [
     "fastapi",
     "uvicorn",
     "pydantic",
-    "requests"
+    "openenv-core>=0.2.0"
 ]
 
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+[project.scripts]
+server = "server.app:main"
