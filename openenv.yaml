@@ -1,7 +1,7 @@
 ﻿hf:
   title: MedAlloc RL
-  colorFrom: yellow
-  colorTo: purple
+  colorFrom: pink
+  colorTo: red
   
 name: hospital_env
 version: 2.0.0
