@@ -1,13 +1,4 @@
-﻿---
-title: MedAlloc-RL
-emoji: 🏥
-colorFrom: red
-colorTo: blue
-sdk: docker
-pinned: false
----
-
-# Hospital Resource Allocation Environment
+﻿# Hospital Resource Allocation Environment
 
 A simulation environment for hospital resource allocation using OpenEnv.
 
