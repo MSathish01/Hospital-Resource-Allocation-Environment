@@ -1,6 +1,5 @@
 ﻿---
 title: MedAlloc RL
-emoji: hospital
 colorFrom: blue
 colorTo: green
 sdk: docker
