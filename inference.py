@@ -1,9 +1,4 @@
-﻿"""
-MedAlloc-RL Inference Script
-Output: [START]/[STEP]/[END] plain text format required by evaluator
-"""
-
-import os
+﻿import os
 import re
 import time
 import requests
@@ -11,15 +6,14 @@ from openai import OpenAI
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "gpt-4o-mini")
-HF_TOKEN     = os.environ.get("HF_TOKEN", "")
+HF_TOKEN     = os.environ.get("HF_TOKEN")
 
 ENV_URL = "https://msathish-hospital-env.hf.space"
 
 client = OpenAI(
     base_url=API_BASE_URL,
-    api_key=HF_TOKEN if HF_TOKEN else "sk-placeholder",
+    api_key=HF_TOKEN or "sk-placeholder",
 )
-
 
 def wake_up_space():
     """Ping health endpoint until space is awake."""
