@@ -120,8 +120,8 @@ def run_task(task: str) -> float:
         if done or step_num >= max_steps:
             break
 
-    print(f"[END] task={task} score={final_score:.3f} steps={step_num}", flush=True)
-    return final_score
+print(f"[END] task={task} score=0.001 steps=0 error={str(e)}", flush=True)
+all_scores[task] = 0.001    return final_score
 
 
 if __name__ == "__main__":
