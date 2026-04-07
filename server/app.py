@@ -179,8 +179,9 @@ def step(action: Action):
 
 # Normalized score 0.0 → 1.0
     max_possible = max(1.0, state_data["total_beds"] * 3.0)
-    score = round(max(0.0, min(1.0, state_data["total_reward"] / max_possible)), 3)
-    return { }
+    score = round(max(0.001, min(0.999, state_data["total_reward"] / max_possible)), 3)    return {
+    
+}
 
 # -------------------------------
 # GRADER  (judges call this)
