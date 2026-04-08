@@ -7,43 +7,54 @@ sdk: docker
 app_port: 7860
 ---
 
-# Hospital Resource Allocation Environment
+# MedAlloc-RL: Hospital Resource Allocation Environment
 
-A simulation environment for hospital resource allocation using OpenEnv.
+A real-world reinforcement learning environment where an AI agent 
+allocates limited hospital beds to patients with varying severity levels.
+
+## Problem Statement
+Hospitals face critical resource allocation decisions daily. This environment
+simulates that challenge — the agent must decide how many beds to allocate
+each step, prioritizing high-severity and emergency patients.
 
 ## Features
-- 3 difficulty levels
-- Realistic patient severity scoring
-- Bed allocation logic
-- FastAPI server
+- Priority-based triage: low / medium / high severity
+- Emergency patient arrivals (20% chance per step)
+- Patient deterioration over time (waiting patients get worse)
+- Dynamic new patient arrivals each step
+- 3 difficulty levels: easy / medium / hard
 
-## Installation
-
-```bash
-pip install fastapi uvicorn requests
-```
-
-## Run Locally
-
-```bash
-uvicorn server.app:app --reload
-```
-
-## API Endpoints
-
-- GET /health - Check server status
-- POST /reset - Reset environment
-- POST /step - Take action step
-- GET /state - Get current state
+## Reward Function
+| Event | Reward |
+|-------|--------|
+| High severity treated | +3.0 |
+| Medium severity treated | +2.0 |
+| Low severity treated | +1.0 |
+| Emergency treated bonus | +1.0 |
+| High severity untreated | -2.0 |
+| Emergency untreated | -1.5 |
+| Wasted bed | -0.3 |
+| Patient deterioration | -0.5 |
 
 ## Tasks
+| Task | Beds | Patients | Challenge |
+|------|------|----------|-----------|
+| Easy | 10 | 5 | Learn basic priority allocation |
+| Medium | 8 | 8 | Balanced pressure, emergencies begin |
+| Hard | 5 | 10 | Crisis mode, scarce resources |
 
-- Easy: 3 patients, 3 beds
-- Medium: 5 patients, 3 beds
-- Hard: 10 patients, 2 beds
+## API
+- `POST /reset?task=easy|medium|hard` — Start new episode
+- `POST /step` — Take action `{"allocate": int}`
+- `GET /state` — Current environment state
+- `GET /grade` — Current episode score (0.001 to 0.999)
+- `GET /health` — Health check
 
-## Reward System
+## Action Space
+`allocate`: integer — number of beds to allocate this step
 
-- Severity 4+: 1.0 reward
-- Severity 2-3: 0.7 reward
-- Severity 0-1: 0.3 reward
+## Observation Space
+- `beds`: available beds this step
+- `patients`: list of waiting patients with severity and emergency flag
+- `step`: current step number
+- `max_steps`: episode length
