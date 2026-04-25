@@ -1,5 +1,5 @@
 ﻿from fastapi import FastAPI, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import List
 import random
@@ -174,48 +174,290 @@ def get_state():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy", "environment": "MedAlloc-RL", "version": "2.0.0"}
+    return {"status": "healthy", "environment": "MedAlloc-RL", "version": "2.0.3"}
 
-@app.get("/")
-def home():
+@app.get("/api")
+def api_index():
     return {
         "message": "MedAlloc-RL Hospital Resource Allocation Environment",
-        "version": "2.0.0",
+        "version": "2.0.3",
         "endpoints": {
-            "reset":  "POST /reset?task=easy|medium|hard",
-            "step":   "POST /step  {allocate: int}",
-            "state":  "GET  /state",
-            "grade":  "GET  /grade",
+            "reset": "POST /reset?task=easy|medium|hard",
+            "step": "POST /step  {allocate: int}",
+            "state": "GET  /state",
+            "grade": "GET  /grade",
             "health": "GET  /health",
-        }
+            "docs": "GET /docs",
+        },
     }
 
-@app.get("/web", response_class=HTMLResponse)
+
+@app.get("/doc", include_in_schema=False)
+def doc_redirect():
+    return RedirectResponse(url="/docs")
+
+def _interactive_html() -> str:
+        return """
+        <!doctype html>
+        <html>
+            <head>
+                <meta charset=\"utf-8\" />
+                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+                <title>MedAlloc-RL Interactive</title>
+            </head>
+            <body style=\"font-family:Arial, sans-serif; max-width:980px; margin:28px auto; padding:0 16px;\">
+                <h1 style=\"margin:0 0 6px;\">MedAlloc-RL — Interactive Hospital Environment</h1>
+                <div style=\"margin-bottom:14px; color:#444;\">
+                    Reset an episode and step through actions. API docs: <a href=\"/docs\">/docs</a> · JSON index: <a href=\"/api\">/api</a>
+                </div>
+
+                <div id=\"banner\" style=\"display:none; padding:10px 12px; border-radius:8px; margin-bottom:14px; background:#f6f6f6;\"></div>
+
+                <div style=\"display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; margin-bottom:14px;\">
+                    <div>
+                        <label for=\"task\" style=\"display:block; font-weight:600; margin-bottom:6px;\">Difficulty</label>
+                        <select id=\"task\" style=\"padding:8px; min-width:180px;\">
+                            <option value=\"easy\">easy</option>
+                            <option value=\"medium\" selected>medium</option>
+                            <option value=\"hard\">hard</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <button id=\"resetBtn\" style=\"padding:9px 14px;\">Reset</button>
+                    </div>
+
+                    <div>
+                        <label for=\"allocate\" style=\"display:block; font-weight:600; margin-bottom:6px;\">Allocate beds</label>
+                        <input id=\"allocate\" type=\"number\" min=\"0\" value=\"0\" style=\"padding:8px; width:120px;\" />
+                    </div>
+
+                    <div>
+                        <div style=\"font-weight:600; margin-bottom:6px;\">Recommendation</div>
+                        <div style=\"display:flex; gap:8px; align-items:center;\">
+                            <span id=\"recText\" style=\"color:#444;\">—</span>
+                            <button id=\"useRecBtn\" style=\"padding:8px 10px;\">Use</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <button id=\"stepBtn\" style=\"padding:9px 14px;\">Step</button>
+                    </div>
+                </div>
+
+                <div style=\"display:flex; gap:18px; flex-wrap:wrap;\">
+                    <div style=\"flex: 1 1 560px;\">
+                        <div style=\"font-weight:700; margin-bottom:6px;\">Overview</div>
+                        <div id=\"summary\" style=\"background:#f6f6f6; padding:12px; border-radius:8px; margin-bottom:12px;\"></div>
+
+                        <div style=\"font-weight:700; margin-bottom:6px;\">Patients Waiting</div>
+                        <div style=\"background:#f6f6f6; padding:12px; border-radius:8px; overflow:auto;\">
+                            <table style=\"width:100%; border-collapse:collapse;\">
+                                <thead>
+                                    <tr>
+                                        <th style=\"text-align:left; padding:6px 8px;\">ID</th>
+                                        <th style=\"text-align:left; padding:6px 8px;\">Severity</th>
+                                        <th style=\"text-align:left; padding:6px 8px;\">Emergency</th>
+                                        <th style=\"text-align:left; padding:6px 8px;\">Waiting</th>
+                                    </tr>
+                                </thead>
+                                <tbody id=\"patients\"></tbody>
+                            </table>
+                        </div>
+
+                        <details style=\"margin-top:12px;\">
+                            <summary style=\"cursor:pointer; font-weight:700;\">Raw observation JSON</summary>
+                            <pre id=\"stateRaw\" style=\"background:#f6f6f6; padding:12px; border-radius:8px; overflow:auto; margin-top:8px;\"></pre>
+                        </details>
+                    </div>
+
+                    <div style=\"flex: 1 1 320px;\">
+                        <div style=\"font-weight:700; margin-bottom:6px;\">Last Step</div>
+                        <pre id=\"last\" style=\"background:#f6f6f6; padding:12px; border-radius:8px; overflow:auto; min-height:360px;\"></pre>
+                    </div>
+                </div>
+
+                <script>
+                    const bannerEl = document.getElementById('banner');
+                    const summaryEl = document.getElementById('summary');
+                    const patientsEl = document.getElementById('patients');
+                    const stateRawEl = document.getElementById('stateRaw');
+                    const lastEl = document.getElementById('last');
+                    const allocateEl = document.getElementById('allocate');
+                    const taskEl = document.getElementById('task');
+                    const stepBtn = document.getElementById('stepBtn');
+                    const resetBtn = document.getElementById('resetBtn');
+                    const recTextEl = document.getElementById('recText');
+                    const useRecBtn = document.getElementById('useRecBtn');
+
+                    let currentObs = null;
+                    let currentDone = false;
+                    let lastRecommendation = 0;
+
+                    function pretty(obj) { return JSON.stringify(obj, null, 2); }
+
+                    function setBanner(text) {
+                        if (!text) {
+                            bannerEl.style.display = 'none';
+                            bannerEl.textContent = '';
+                            return;
+                        }
+                        bannerEl.style.display = 'block';
+                        bannerEl.textContent = text;
+                    }
+
+                    function recommendAllocate(obs) {
+                        if (!obs) return 0;
+                        const beds = Number(obs.beds || 0);
+                        const patients = Array.isArray(obs.patients) ? obs.patients : [];
+                        const highOrEmerg = patients.filter(p => p.severity === 'high' || p.emergency).length;
+                        const medium = patients.filter(p => p.severity === 'medium').length;
+                        const base = highOrEmerg > 0 ? highOrEmerg : (medium > 0 ? medium : 1);
+                        return Math.max(0, Math.min(base, beds));
+                    }
+
+                    function renderRecommendation(obs) {
+                        const rec = recommendAllocate(obs);
+                        lastRecommendation = rec;
+                        recTextEl.textContent = String(rec);
+                    }
+
+                    function renderSummary(obs) {
+                        if (!obs) {
+                            summaryEl.textContent = 'No state yet. Click Reset.';
+                            return;
+                        }
+                        const patients = Array.isArray(obs.patients) ? obs.patients : [];
+                        const emerg = patients.filter(p => !!p.emergency).length;
+                        const high = patients.filter(p => p.severity === 'high').length;
+                        const medium = patients.filter(p => p.severity === 'medium').length;
+                        const low = patients.filter(p => p.severity === 'low').length;
+                        summaryEl.innerHTML = `
+                            <div style=\"display:flex; gap:16px; flex-wrap:wrap;\">
+                                <div><div style=\"font-weight:700;\">Beds</div><div>${obs.beds} / ${obs.total_beds}</div></div>
+                                <div><div style=\"font-weight:700;\">Step</div><div>${obs.step} / ${obs.max_steps}</div></div>
+                                <div><div style=\"font-weight:700;\">Difficulty</div><div>${String(obs.difficulty || '').toUpperCase()}</div></div>
+                                <div><div style=\"font-weight:700;\">Waiting</div><div>${patients.length}</div></div>
+                                <div><div style=\"font-weight:700;\">High / Med / Low</div><div>${high} / ${medium} / ${low}</div></div>
+                                <div><div style=\"font-weight:700;\">Emergencies</div><div>${emerg}</div></div>
+                            </div>
+                        `;
+                    }
+
+                    function renderPatients(obs) {
+                        const patients = obs && Array.isArray(obs.patients) ? obs.patients : [];
+                        if (patients.length === 0) {
+                            patientsEl.innerHTML = `<tr><td colspan=\"4\" style=\"padding:8px; color:#444;\">No waiting patients.</td></tr>`;
+                            return;
+                        }
+                        const rows = patients.map(p => {
+                            const sev = String(p.severity || 'unknown');
+                            const emerg = p.emergency ? 'YES' : '';
+                            const waiting = (p.waiting_steps ?? 0);
+                            return `
+                                <tr>
+                                    <td style=\"padding:6px 8px;\">${p.id ?? ''}</td>
+                                    <td style=\"padding:6px 8px;\">${sev.toUpperCase()}</td>
+                                    <td style=\"padding:6px 8px;\">${emerg}</td>
+                                    <td style=\"padding:6px 8px;\">${waiting}</td>
+                                </tr>
+                            `;
+                        }).join('');
+                        patientsEl.innerHTML = rows;
+                    }
+
+                    function renderRaw(obs) {
+                        stateRawEl.textContent = pretty(obs || {});
+                    }
+
+                    function setObs(obs) {
+                        currentObs = obs;
+                        if (obs && typeof obs.beds === 'number') {
+                            allocateEl.max = String(obs.beds);
+                            if (Number(allocateEl.value) > obs.beds) allocateEl.value = String(obs.beds);
+                        }
+                        renderSummary(obs);
+                        renderPatients(obs);
+                        renderRaw(obs);
+                        renderRecommendation(obs);
+                    }
+
+                    function setDone(done) {
+                        currentDone = !!done;
+                        stepBtn.disabled = currentDone;
+                        if (currentDone) setBanner('Episode complete. Click Reset to start a new one.');
+                    }
+
+                    async function doReset() {
+                        setBanner('');
+                        lastEl.textContent = '';
+                        stepBtn.disabled = true;
+                        const task = taskEl.value;
+                        const res = await fetch(`/reset?task=${encodeURIComponent(task)}`, { method: 'POST' });
+                        const data = await res.json();
+                        if (data.observation) {
+                            setDone(false);
+                            setObs(data.observation);
+                            allocateEl.value = String(lastRecommendation);
+                            stepBtn.disabled = false;
+                        } else {
+                            lastEl.textContent = pretty(data);
+                            setBanner('Reset failed. See Last Step.');
+                        }
+                    }
+
+                    async function doStep() {
+                        if (currentDone) return;
+                        setBanner('');
+                        stepBtn.disabled = true;
+                        const allocate = Number(allocateEl.value || 0);
+                        const res = await fetch('/step', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ allocate })
+                        });
+                        const data = await res.json();
+                        lastEl.textContent = pretty(data);
+
+                        if (data.observation) setObs(data.observation);
+
+                        if (data.error) {
+                            setBanner(String(data.error));
+                            stepBtn.disabled = false;
+                            return;
+                        }
+
+                        if (data.done) {
+                            setDone(true);
+                            try {
+                                const gradeRes = await fetch('/grade');
+                                const grade = await gradeRes.json();
+                                lastEl.textContent = pretty({ ...data, final_grade: grade });
+                            } catch (e) {}
+                            return;
+                        }
+
+                        stepBtn.disabled = false;
+                    }
+
+                    resetBtn.addEventListener('click', () => doReset());
+                    stepBtn.addEventListener('click', () => doStep());
+                    useRecBtn.addEventListener('click', () => { allocateEl.value = String(lastRecommendation); });
+                    doReset();
+                </script>
+            </body>
+        </html>
+        """
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def home_ui():
+        return _interactive_html()
+
+
+@app.get("/web", response_class=HTMLResponse, include_in_schema=False)
 def web_ui():
-    return """
-    <html>
-      <head><title>MedAlloc-RL</title></head>
-      <body style="font-family:Arial;max-width:700px;margin:40px auto;padding:20px">
-        <h1>MedAlloc-RL Hospital Environment</h1>
-        <p>Hospital Resource Allocation - Reinforcement Learning Environment</p>
-        <h3>Features</h3>
-        <ul>
-          <li>Priority-based patient triage (low/medium/high)</li>
-          <li>Emergency patient arrivals (20 percent per step)</li>
-          <li>Patient deterioration over time</li>
-          <li>Time pressure with step limits</li>
-          <li>Normalized scoring 0.001 to 0.999</li>
-          <li>3 difficulty levels: easy / medium / hard</li>
-        </ul>
-        <h3>Quick Links</h3>
-        <ul>
-          <li><a href="/docs">API Docs</a></li>
-          <li><a href="/health">Health Check</a></li>
-          <li><a href="/grade">Current Grade</a></li>
-        </ul>
-      </body>
-    </html>
-    """
+        return _interactive_html()
 
 def _clean_obs(s: dict) -> dict:
     return {

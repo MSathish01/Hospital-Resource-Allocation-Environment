@@ -1,7 +1,7 @@
-﻿import requests
+import requests
 import time
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://msathish-hospital-env.hf.space"
 ENV_NAME = "medalloc"
 MODEL_NAME = "gpt-4o-mini"
 
@@ -92,7 +92,7 @@ def run_task(task: str):
 if __name__ == "__main__":
     # Check if server is running
     if not check_server():
-        print("Error: Server is not running at http://localhost:8000")
+        print("Error: Server is not running at https://msathish-hospital-env.hf.space")
         print("Please start the server first: uvicorn server.app:app --reload")
         exit(1)
 
